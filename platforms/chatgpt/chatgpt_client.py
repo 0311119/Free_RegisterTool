@@ -512,10 +512,24 @@ class ChatGPTClient:
                 allow_redirects=True,
                 timeout=30,
             )
-            return r.status_code == 200
+            if r.status_code != 200:
+                return False
+            if not self._has_cf_clearance_cookie():
+                self._log("Homepage session not ready: cf_clearance=no", "warning")
+                return False
+            return True
         except Exception as e:
             self._log(f"访问首页失败: {e}")
             return False
+
+    def _has_cf_clearance_cookie(self):
+        try:
+            for c in self.session.cookies:
+                if getattr(c, "name", "") == "cf_clearance":
+                    return True
+        except Exception:
+            return False
+        return False
 
     def get_csrf_token(self):
         """获取 CSRF token"""
@@ -937,7 +951,7 @@ class ChatGPTClient:
         """
         from urllib.parse import urlparse
 
-        max_auth_attempts = 3
+        max_auth_attempts = 5
         final_url = ""
         final_path = ""
 
@@ -945,6 +959,7 @@ class ChatGPTClient:
             if auth_attempt > 0:
                 self._log(f"预授权阶段重试 {auth_attempt + 1}/{max_auth_attempts}...")
                 self._reset_session()
+                time.sleep(min(2.0 * auth_attempt, 6.0))
 
             # 1. 访问首页
             if not self.visit_homepage():
