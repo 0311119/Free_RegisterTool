@@ -1,6 +1,6 @@
 """
-娉ㄥ唽娴佺▼寮曟搸
-浠?main.py 涓彁鍙栧苟閲嶆瀯鐨勬敞鍐屾祦绋?
+注册流程引擎
+从 main.py 中提取并重构的注册流程
 """
 
 import base64
@@ -267,7 +267,7 @@ class RefreshTokenRegistrationEngine:
             task_control.checkpoint(consume_skip=consume_skip)
 
     def _generate_password(self, length: int = DEFAULT_PASSWORD_LENGTH) -> str:
-        """鐢熸垚闅忔満瀵嗙爜"""
+        """生成随机密码"""
         resolved_length = max(int(length or DEFAULT_PASSWORD_LENGTH), 8)
         return generate_random_password(resolved_length)
 
@@ -2935,15 +2935,9 @@ class RefreshTokenRegistrationEngine:
             # 说明经过了一轮登录/验证邮箱并走到了 addphone 但是没过去风控
             if getattr(self, "_oauth_blocked_by_phone", False):
                 result.success = False
-                result.error_message = (
-                    result.error_message
-                    or "OAuth blocked at add-phone step after basic account creation"
-                )
+                result.error_message = "oauth_blocked_by_phone"
                 result.metadata["oauth_state"] = "blocked_by_phone"
-                self._log(
-                    "?????? OAuth ? add-phone ??????????????????????????????",
-                    "warning",
-                )
+                self._log("新登录会话的 OAuth 在 add-phone 步骤被阻断，按要求保留基础账号状态并结束不再重试。", "warning")
                 return result
 
             result.error_message = result.error_message or "Failed to obtain real OAuth credentials after restart login"
@@ -3368,24 +3362,63 @@ class RefreshTokenRegistrationEngine:
             SmsBowerWaitRetryError,
         )
 
+        sms_provider = "smsbower"
         api_key = ""
         try:
             from core.config_store import config_store
 
+            sms_provider = str(config_store.get("sms_provider", "smsbower") or "smsbower").strip().lower() or "smsbower"
             api_key = str(config_store.get("smsbower_api_key", "") or "").strip()
         except Exception:
             pass
 
+        try:
+            extra = self.extra_config or {}
+            extra_provider = str(extra.get("sms_provider", "") or "").strip().lower()
+            if extra_provider:
+                sms_provider = extra_provider
+        except Exception:
+            pass
+
+        if sms_provider in {"5sim", "fivesim"}:
+            sms_provider = "5sim"
+        elif sms_provider in {"hero", "herosms"}:
+            sms_provider = "herosms"
+        else:
+            sms_provider = "smsbower"
+
+        provider_key_field = {
+            "smsbower": "smsbower_api_key",
+            "5sim": "sim5_api_key",
+            "herosms": "herosms_api_key",
+        }.get(sms_provider, "smsbower_api_key")
+        provider_env_key = {
+            "smsbower": "SMSBOWER_API_KEY",
+            "5sim": "SIM5_API_KEY",
+            "herosms": "HEROSMS_API_KEY",
+        }.get(sms_provider, "SMSBOWER_API_KEY")
+
+        try:
+            from core.config_store import config_store
+
+            api_key = str(config_store.get(provider_key_field, api_key) or api_key).strip()
+        except Exception:
+            pass
+        try:
+            extra = self.extra_config or {}
+            api_key = str(extra.get(provider_key_field, api_key) or api_key).strip()
+        except Exception:
+            pass
         if not api_key:
             import os
 
-            api_key = os.getenv("SMSBOWER_API_KEY", "").strip()
+            api_key = os.getenv(provider_env_key, "").strip()
         if not api_key:
-            self._log("SMSBOWER API key missing, skipping phone verification", "warning")
+            self._log(f"{sms_provider.upper()} API key missing, skipping phone verification", "warning")
             self._last_phone_failure_reason = "missing_key"
             return False
 
-        client = SmsBowerClient(api_key)
+        client = SmsBowerClient.from_provider(sms_provider, api_key)
         activation_id = None
         activation_completed = False
         self._last_phone_failure_reason = ""
@@ -3393,9 +3426,9 @@ class RefreshTokenRegistrationEngine:
 
         try:
             balance = client.get_balance()
-            self._log(f"SMSBOWER balance: ${balance:.4f}")
+            self._log(f"{sms_provider.upper()} balance: ${balance:.4f}")
             if balance < 0.05:
-                self._log(f"SMSBOWER balance too low (${balance:.4f} < $0.05)", "warning")
+                self._log(f"{sms_provider.upper()} balance too low (${balance:.4f} < $0.05)", "warning")
                 self._last_phone_failure_reason = "low_balance"
                 return False
 
@@ -3544,7 +3577,7 @@ class RefreshTokenRegistrationEngine:
             provider_label = f", provider_ids={provider_ids}" if provider_ids else ""
             except_provider_label = f", except_provider_ids={except_provider_ids}" if except_provider_ids else ""
             self._log(
-                "SMSBOWER config: "
+                f"{sms_provider.upper()} config: "
                 f"countries={','.join(countries)}, service=dr(OpenAI){quality_label}"
                 f"{price_label}{price_steps_label}{min_price_label}{provider_label}{except_provider_label}"
                 f", phone_attempts_per_country={max_phone_attempts}, add_phone_send_attempts={max_add_phone_send_attempts}, "
@@ -3620,10 +3653,8 @@ class RefreshTokenRegistrationEngine:
                             except SmsBowerInvalidPhoneExceptionError:
                                 if not phone_exception:
                                     raise
-                                self._log(
-                                    "SMSBOWER rejected phoneException; retrying getNumber without excluded phones",
-                                    "warning",
-                                )
+                                # 之前这里会打印警告，现在改为 debug 隐藏或者完全注释掉，避免被误认为报错日志冗余
+                                # self._log("SMSBOWER rejected phoneException; retrying getNumber without excluded phones", "debug")
                                 number = client.get_number(
                                     service="dr",
                                     country=country,
@@ -4078,7 +4109,7 @@ class RefreshTokenRegistrationEngine:
                     pass
 
     def _check_email_domain_and_suggest(self):
-        """???????????"""
+        """检查邮箱类型并进行预警建议"""
         try:
             if not self.email or '@' not in self.email:
                 return

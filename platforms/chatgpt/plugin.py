@@ -198,18 +198,18 @@ class ChatGPTPlatform(BasePlatform):
             {"id": "probe_local_status", "label": "探测本地状态", "params": []},
             {"id": "sync_cliproxyapi_status", "label": "同步 CLIProxyAPI 状态", "params": []},
             {"id": "sync_sub2api_status", "label": "同步 Sub2API 状态", "params": []},
-            {"id": "refresh_token", "label": "鍒锋柊 Token", "params": []},
+            {"id": "refresh_token", "label": "刷新 Token", "params": []},
             {
                 "id": "payment_link",
-                "label": "鐢熸垚鏀粯閾炬帴",
+                "label": "生成支付链接",
                 "params": [
-                    {"key": "country", "label": "鍦板尯", "type": "select", "options": ["US", "SG", "TR", "HK", "JP", "GB", "AU", "CA"]},
-                    {"key": "plan", "label": "濂楅", "type": "select", "options": ["plus", "team"]},
+                    {"key": "country", "label": "地区", "type": "select", "options": ["US", "SG", "TR", "HK", "JP", "GB", "AU", "CA"]},
+                    {"key": "plan", "label": "套餐", "type": "select", "options": ["plus", "team"]},
                 ],
             },
             {
                 "id": "upload_cpa",
-                "label": "涓婁紶 CPA",
+                "label": "上传 CPA",
                 "params": [
                     {"key": "api_url", "label": "CPA API URL", "type": "text"},
                     {"key": "api_key", "label": "CPA API Key", "type": "text"},
@@ -217,7 +217,7 @@ class ChatGPTPlatform(BasePlatform):
             },
             {
                 "id": "upload_sub2api",
-                "label": "涓婁紶 Sub2API",
+                "label": "上传 Sub2API",
                 "params": [
                     {"key": "api_url", "label": "Sub2API API URL", "type": "text"},
                     {"key": "api_key", "label": "Sub2API API Key", "type": "text"},
@@ -225,7 +225,7 @@ class ChatGPTPlatform(BasePlatform):
             },
             {
                 "id": "upload_tm",
-                "label": "涓婁紶 Team Manager",
+                "label": "上传 Team Manager",
                 "params": [
                     {"key": "api_url", "label": "TM API URL", "type": "text"},
                     {"key": "api_key", "label": "TM API Key", "type": "text"},
@@ -233,7 +233,7 @@ class ChatGPTPlatform(BasePlatform):
             },
             {
                 "id": "upload_codex_proxy",
-                "label": "涓婁紶 CodexProxy",
+                "label": "上传 CodexProxy",
                 "params": [
                     {"key": "api_url", "label": "API URL", "type": "text"},
                     {"key": "api_key", "label": "Admin Key", "type": "text"},
@@ -241,7 +241,7 @@ class ChatGPTPlatform(BasePlatform):
             },
             {
                 "id": "upload_contribution",
-                "label": "涓婁紶 Contribution",
+                "label": "上传 Contribution",
                 "params": [
                     {"key": "api_url", "label": "Contribution API URL", "type": "text"},
                     {"key": "api_key", "label": "Public Key", "type": "text"},
@@ -249,9 +249,9 @@ class ChatGPTPlatform(BasePlatform):
             },
             {
                 "id": "auto_pay",
-                "label": "鑷姩鏀粯 Plus",
+                "label": "自动支付 Plus",
                 "params": [
-                    {"key": "plan", "label": "濂楅", "type": "select", "options": ["plus", "team"]},
+                    {"key": "plan", "label": "套餐", "type": "select", "options": ["plus", "team"]},
                     {"key": "provider", "label": "Provider", "type": "select", "options": [
                         "paypal_web", "gopay_api", "gopay_android", "card", "manual_link",
                     ]},

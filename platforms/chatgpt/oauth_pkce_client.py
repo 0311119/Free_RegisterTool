@@ -386,9 +386,9 @@ class OAuthPkceClient:
         )
         if resp.status_code != 200:
             raise RuntimeError(
-                f"OTP ????: HTTP {resp.status_code} {resp.text[:300]}"
+                f"OTP 发送失败: HTTP {resp.status_code} {resp.text[:300]}"
             )
-        self._log("OTP ????")
+        self._log("OTP 发送成功")
         try:
             return resp.json()
         except Exception:

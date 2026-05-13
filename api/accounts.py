@@ -147,7 +147,7 @@ def list_accounts(
         q = q.where(AccountModel.platform == platform)
     if email:
         q = q.where(AccountModel.email.contains(email))
-    # ??????????????????
+    # 按照创建时间倒序排列
     q = q.order_by(AccountModel.created_at.desc())
 
     page = max(1, int(page or 1))

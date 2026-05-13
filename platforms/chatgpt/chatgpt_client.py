@@ -754,7 +754,7 @@ class ChatGPTClient:
                 otp_context = self._capture_email_otp_context(data)
                 if otp_context:
                     keys_text = ", ".join(sorted(otp_context.keys()))
-                    self._log(f"???????????????? {keys_text}")
+                    self._log(f"成功提取了邮箱验证环境，包含参数: {keys_text}")
                 response_url = getattr(r, "url", "")
                 if not isinstance(response_url, str):
                     response_url = ""

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Card,
   Form,
@@ -28,15 +28,48 @@ import { apiFetch } from '@/lib/utils'
 import { useRegisterTask } from '@/contexts/RegisterTaskContext'
 
 const { Text } = Typography
+const DEFAULT_PARALLEL_MAIL_MIX = ['luckmail', 'cfworker', 'mail2925']
+const MIX_PROVIDER_OPTIONS = [
+  { value: 'luckmail', label: 'LuckMail' },
+  { value: 'cfworker', label: 'CF Worker' },
+  { value: 'mail2925', label: '2925 Mail' },
+  { value: 'moemail', label: 'MoeMail (sall.cc)' },
+  { value: 'tempmail_lol', label: 'TempMail.lol' },
+  { value: 'skymail', label: 'SkyMail (CloudMail)' },
+  { value: 'maliapi', label: 'YYDS Mail / MaliAPI' },
+  { value: 'gptmail', label: 'GPTMail' },
+  { value: 'opentrashmail', label: 'OpenTrashMail' },
+  { value: 'duckmail', label: 'DuckMail' },
+  { value: 'freemail', label: 'Freemail' },
+  { value: 'laoudo', label: 'Laoudo' },
+]
 
 export default function RegisterTaskPage() {
   const [form] = Form.useForm()
+  const [mixProviderOptions, setMixProviderOptions] = useState(MIX_PROVIDER_OPTIONS)
   const { task, polling, startTask, clearTask } = useRegisterTask()
   const { mode: chatgptRegistrationMode, setMode: setChatgptRegistrationMode } =
     usePersistentChatGPTRegistrationMode()
 
   useEffect(() => {
     apiFetch('/config').then((cfg) => {
+      const configuredProviders = MIX_PROVIDER_OPTIONS.filter((item) => {
+        if (item.value === 'luckmail') return !!String(cfg.luckmail_api_key || '').trim()
+        if (item.value === 'cfworker') return !!String(cfg.cfworker_api_url || '').trim()
+        if (item.value === 'mail2925') return !!String(cfg.mail2925_login_name || '').trim() && !!String(cfg.mail2925_password || '').trim()
+        if (item.value === 'moemail') return !!String(cfg.moemail_api_url || '').trim() && !!String(cfg.moemail_api_key || '').trim()
+        if (item.value === 'tempmail_lol') return true
+        if (item.value === 'skymail') return !!String(cfg.skymail_api_base || '').trim() && !!String(cfg.skymail_token || '').trim()
+        if (item.value === 'maliapi') return !!String(cfg.maliapi_base_url || '').trim() && !!String(cfg.maliapi_api_key || '').trim()
+        if (item.value === 'gptmail') return !!String(cfg.gptmail_base_url || '').trim() && !!String(cfg.gptmail_api_key || '').trim()
+        if (item.value === 'opentrashmail') return !!String(cfg.opentrashmail_api_url || '').trim()
+        if (item.value === 'duckmail') return !!String(cfg.duckmail_api_url || '').trim() || !!String(cfg.duckmail_provider_url || '').trim()
+        if (item.value === 'freemail') return !!String(cfg.freemail_api_url || '').trim()
+        if (item.value === 'laoudo') return !!String(cfg.laoudo_email || '').trim() && !!String(cfg.laoudo_auth || '').trim()
+        return false
+      })
+      const resolvedMix = configuredProviders.length > 0 ? configuredProviders : MIX_PROVIDER_OPTIONS.filter((item) => DEFAULT_PARALLEL_MAIL_MIX.includes(item.value))
+      setMixProviderOptions(resolvedMix)
       const currentPlatform = form.getFieldValue('platform') || 'trae'
       form.setFieldsValue({
         executor_type: normalizeExecutorForPlatform(currentPlatform, cfg.default_executor),
@@ -72,6 +105,7 @@ export default function RegisterTaskPage() {
         mail2925_password: cfg.mail2925_password || '',
         mail2925_alias_mode: cfg.mail2925_alias_mode || 'main',
         mail2925_domain: cfg.mail2925_domain || '2925.com',
+        mail_provider_mix: resolvedMix.map((item) => item.value),
         cfworker_api_url: cfg.cfworker_api_url || '',
         cfworker_admin_token: cfg.cfworker_admin_token || '',
         cfworker_custom_auth: cfg.cfworker_custom_auth || '',
@@ -80,6 +114,9 @@ export default function RegisterTaskPage() {
         cfworker_random_subdomain: parseBooleanConfigValue(cfg.cfworker_random_subdomain),
         cfworker_fingerprint: cfg.cfworker_fingerprint || '',
         smsbower_api_key: cfg.smsbower_api_key || '',
+        sms_provider: cfg.sms_provider || 'smsbower',
+        sim5_api_key: cfg.sim5_api_key || '',
+        herosms_api_key: cfg.herosms_api_key || '',
         smsbower_country: cfg.smsbower_country || '',
         smsbower_type: cfg.smsbower_type || '',
         smsbower_max_price: cfg.smsbower_max_price || '',
@@ -153,6 +190,9 @@ export default function RegisterTaskPage() {
       cfworker_random_subdomain: values.cfworker_random_subdomain,
       cfworker_fingerprint: values.cfworker_fingerprint,
       smsbower_api_key: values.smsbower_api_key,
+      sms_provider: values.sms_provider,
+      sim5_api_key: values.sim5_api_key,
+      herosms_api_key: values.herosms_api_key,
       smsbower_country: values.smsbower_country,
       smsbower_type: values.smsbower_type,
       smsbower_max_price: values.smsbower_max_price,
@@ -219,7 +259,7 @@ export default function RegisterTaskPage() {
   const selectedMailProviders = mailProviderMixEnabled
     ? Array.isArray(mailProviderMix) && mailProviderMix.length > 0
       ? mailProviderMix
-      : ['luckmail', 'cfworker', 'mail2925']
+      : mixProviderOptions.map((item) => item.value)
     : [mailProvider]
 
   useEffect(() => {
@@ -234,9 +274,9 @@ export default function RegisterTaskPage() {
     if (!mailProviderMixEnabled) return
     const currentMix = form.getFieldValue('mail_provider_mix')
     if (!Array.isArray(currentMix) || currentMix.length === 0) {
-      form.setFieldValue('mail_provider_mix', ['luckmail', 'cfworker', 'mail2925'])
+      form.setFieldValue('mail_provider_mix', mixProviderOptions.map((item) => item.value))
     }
-  }, [form, mailProviderMixEnabled])
+  }, [form, mailProviderMixEnabled, mixProviderOptions])
 
   return (
     <div style={{ maxWidth: 800 }}>
@@ -252,7 +292,7 @@ export default function RegisterTaskPage() {
         mail_provider: 'luckmail',
         mail_config_override_enabled: false,
         mail_provider_mix_enabled: false,
-        mail_provider_mix: ['luckmail', 'cfworker', 'mail2925'],
+        mail_provider_mix: DEFAULT_PARALLEL_MAIL_MIX,
         gptmail_base_url: 'https://mail.chatgpt.org.uk',
         count: 1,
         concurrency: 1,
@@ -356,11 +396,7 @@ export default function RegisterTaskPage() {
               extra="并发任务会先随机打散一次，再按轮询方式分配这些邮箱源"
             >
               <Checkbox.Group
-                options={[
-                  { value: 'luckmail', label: 'LuckMail' },
-                  { value: 'cfworker', label: 'CF Worker' },
-                  { value: 'mail2925', label: '2925 Mail' },
-                ]}
+                options={mixProviderOptions}
               />
             </Form.Item>
           )}
@@ -524,12 +560,27 @@ export default function RegisterTaskPage() {
         </Card>
 
         {platform === 'chatgpt' && (
-          <Card title="ChatGPT 手机验证（SMSBOWER）" style={{ marginBottom: 16 }}>
+          <Card title="ChatGPT 手机验证（接码平台）" style={{ marginBottom: 16 }}>
             <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
               仅在 OAuth 流程进入 `add_phone` 时使用。Free 注册通常不会触发；Plus/风控场景可能需要自动接码。
             </Text>
+            <Form.Item name="sms_provider" label="接码平台">
+              <Select
+                options={[
+                  { value: 'smsbower', label: 'SMSBOWER' },
+                  { value: '5sim', label: '5SIM' },
+                  { value: 'herosms', label: 'HeroSMS' },
+                ]}
+              />
+            </Form.Item>
             <Form.Item name="smsbower_api_key" label="SMSBOWER API Key">
               <Input.Password placeholder="留空则从设置页读取" />
+            </Form.Item>
+            <Form.Item name="sim5_api_key" label="5SIM API Key">
+              <Input.Password placeholder="仅 sms_provider=5sim 时使用" />
+            </Form.Item>
+            <Form.Item name="herosms_api_key" label="HeroSMS API Key">
+              <Input.Password placeholder="仅 sms_provider=herosms 时使用" />
             </Form.Item>
             <Form.Item name="smsbower_country" label="国家代码">
               <Input placeholder="例如 78,10,6,22,73,16,187,52,12" />
@@ -558,8 +609,8 @@ export default function RegisterTaskPage() {
               <Form.Item name="smsbower_phone_attempts" label="每国取号次数" style={{ flex: 1 }}>
                 <Input placeholder="默认 12" />
               </Form.Item>
-              <Form.Item name="smsbower_add_phone_send_attempts" label="add-phone ????" style={{ flex: 1 }}>
-                <Input placeholder="?? 8" />
+              <Form.Item name="smsbower_add_phone_send_attempts" label="add-phone 尝试次数" style={{ flex: 1 }}>
+                <Input placeholder="默认 8" />
               </Form.Item>
               <Form.Item name="smsbower_otp_timeout_seconds" label="短信等待秒数" style={{ flex: 1 }}>
                 <Input placeholder="默认 120" />

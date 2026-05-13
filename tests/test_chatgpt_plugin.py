@@ -82,6 +82,19 @@ class _FailingAdapter:
         raise AssertionError("build_account should not be called for failures")
 
 
+class _OAuthBlockedAdapter:
+    def run(self, context):
+        context.email_service.create_email()
+        return mock.Mock(
+            success=False,
+            error_message="OAuth blocked at add-phone step after basic account creation",
+            metadata={"oauth_state": "blocked_by_phone"},
+        )
+
+    def build_account(self, result, fallback_password):
+        raise AssertionError("build_account should not be called when OAuth is blocked")
+
+
 class ChatGPTPluginTests(unittest.TestCase):
     def test_custom_provider_rejects_blank_email(self):
         platform = ChatGPTPlatform(
@@ -177,6 +190,27 @@ class ChatGPTPluginTests(unittest.TestCase):
         self.assertEqual(account, mailbox.account)
         self.assertFalse(success)
         self.assertEqual(error, "registration failed")
+
+    def test_oauth_blocked_result_is_treated_as_registration_failure(self):
+        mailbox = _TrackingMailbox()
+        platform = ChatGPTPlatform(
+            config=RegisterConfig(extra={"chatgpt_registration_mode": "refresh_token"}),
+            mailbox=mailbox,
+        )
+
+        with mock.patch(
+            "platforms.chatgpt.plugin.build_chatgpt_registration_mode_adapter",
+            return_value=_OAuthBlockedAdapter(),
+        ):
+            with self.assertRaises(RuntimeError) as ctx:
+                platform.register()
+
+        self.assertIn("OAuth blocked", str(ctx.exception))
+        self.assertEqual(len(mailbox.status_updates), 1)
+        account, success, error = mailbox.status_updates[0]
+        self.assertEqual(account, mailbox.account)
+        self.assertFalse(success)
+        self.assertIn("OAuth blocked", error)
 
     def test_payment_link_action_returns_cashier_url_and_description(self):
         platform = ChatGPTPlatform(config=RegisterConfig())

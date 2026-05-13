@@ -49,6 +49,43 @@ import { useRegisterTask } from '@/contexts/RegisterTaskContext'
 
 const { Text } = Typography
 const DEFAULT_PARALLEL_MAIL_MIX = ['luckmail', 'cfworker', 'mail2925']
+const MIX_PROVIDER_OPTIONS = [
+  { value: 'luckmail', label: 'LuckMail' },
+  { value: 'cfworker', label: 'CF Worker' },
+  { value: 'mail2925', label: '2925 Mail' },
+  { value: 'moemail', label: 'MoeMail (sall.cc)' },
+  { value: 'tempmail_lol', label: 'TempMail.lol' },
+  { value: 'skymail', label: 'SkyMail (CloudMail)' },
+  { value: 'maliapi', label: 'YYDS Mail / MaliAPI' },
+  { value: 'gptmail', label: 'GPTMail' },
+  { value: 'opentrashmail', label: 'OpenTrashMail' },
+  { value: 'duckmail', label: 'DuckMail' },
+  { value: 'freemail', label: 'Freemail' },
+  { value: 'laoudo', label: 'Laoudo' },
+]
+
+function resolveConfiguredMixOptions(cfg: Record<string, any>) {
+  const has = (key: string) => String(cfg?.[key] || '').trim().length > 0
+  const allowed = new Set<string>()
+
+  if (has('luckmail_api_key')) allowed.add('luckmail')
+  if (has('cfworker_api_url')) allowed.add('cfworker')
+  if (has('mail2925_login_name') && has('mail2925_password')) allowed.add('mail2925')
+  if (has('moemail_api_url') && has('moemail_api_key')) allowed.add('moemail')
+  if (has('skymail_api_base') && has('skymail_token')) allowed.add('skymail')
+  if (has('maliapi_base_url') && has('maliapi_api_key')) allowed.add('maliapi')
+  if (has('gptmail_base_url') && has('gptmail_api_key')) allowed.add('gptmail')
+  if (has('opentrashmail_api_url')) allowed.add('opentrashmail')
+  if (has('duckmail_api_url') || has('duckmail_provider_url')) allowed.add('duckmail')
+  if (has('freemail_api_url')) allowed.add('freemail')
+  if (has('laoudo_email') && has('laoudo_auth')) allowed.add('laoudo')
+  allowed.add('tempmail_lol')
+
+  const options = MIX_PROVIDER_OPTIONS.filter((item) => allowed.has(item.value))
+  return options.length > 0
+    ? options
+    : MIX_PROVIDER_OPTIONS.filter((item) => DEFAULT_PARALLEL_MAIL_MIX.includes(item.value))
+}
 
 function normalizeTaskMeta(task: any) {
   const progress = String(task?.progress || '0/0')
@@ -676,6 +713,7 @@ export default function Accounts() {
     'probe_selected' | 'probe_page' | 'probe_all' | 'sub2api_selected' | 'sub2api_page' | 'sub2api_all' | ''
   >('')
   const [sub2ApiUploadLoading, setSub2ApiUploadLoading] = useState<'selected' | 'page' | 'all' | ''>('')
+  const [mixProviderOptions, setMixProviderOptions] = useState(MIX_PROVIDER_OPTIONS)
   const registerMailProvider = Form.useWatch('mail_provider', registerForm) || 'luckmail'
   const registerMailConfigOverrideEnabled = Form.useWatch('mail_config_override_enabled', registerForm)
   const registerMailProviderMixEnabled = Form.useWatch('mail_provider_mix_enabled', registerForm)
@@ -683,7 +721,7 @@ export default function Accounts() {
   const selectedRegisterMailProviders = registerMailProviderMixEnabled
     ? Array.isArray(registerMailProviderMix) && registerMailProviderMix.length > 0
       ? registerMailProviderMix
-      : DEFAULT_PARALLEL_MAIL_MIX
+      : mixProviderOptions.map((item) => item.value)
     : [registerMailProvider]
 
   useEffect(() => {
@@ -691,12 +729,23 @@ export default function Accounts() {
   }, [platform])
 
   useEffect(() => {
+    apiFetch('/config')
+      .then((cfg) => {
+        const options = resolveConfiguredMixOptions(cfg || {})
+        setMixProviderOptions(options)
+      })
+      .catch(() => {
+        setMixProviderOptions(MIX_PROVIDER_OPTIONS.filter((item) => DEFAULT_PARALLEL_MAIL_MIX.includes(item.value)))
+      })
+  }, [])
+
+  useEffect(() => {
     if (!registerMailProviderMixEnabled) return
     const currentMix = registerForm.getFieldValue('mail_provider_mix')
     if (!Array.isArray(currentMix) || currentMix.length === 0) {
-      registerForm.setFieldValue('mail_provider_mix', DEFAULT_PARALLEL_MAIL_MIX)
+      registerForm.setFieldValue('mail_provider_mix', mixProviderOptions.map((item) => item.value))
     }
-  }, [registerForm, registerMailProviderMixEnabled])
+  }, [registerForm, registerMailProviderMixEnabled, mixProviderOptions])
 
   useEffect(() => {
     if (taskId || !globalTask) return
@@ -1003,6 +1052,9 @@ export default function Accounts() {
         cfworker_random_subdomain: parseBooleanConfigValue(cfg.cfworker_random_subdomain),
         cfworker_fingerprint: cfg.cfworker_fingerprint,
         smsbower_api_key: cfg.smsbower_api_key,
+        sms_provider: cfg.sms_provider,
+        sim5_api_key: cfg.sim5_api_key,
+        herosms_api_key: cfg.herosms_api_key,
         smsbower_country: cfg.smsbower_country,
         smsbower_type: cfg.smsbower_type,
         smsbower_max_price: cfg.smsbower_max_price,
@@ -1882,8 +1934,8 @@ export default function Accounts() {
               <InputNumber min={0} precision={1} step={0.5} style={{ width: '100%' }} placeholder="0 = 不延迟" />
             </Form.Item>
             {currentPlatform === 'chatgpt' && (
-              <Form.Item name="smsbower_add_phone_send_attempts" label="add-phone ????">
-                <Input placeholder="???????? / 8" />
+              <Form.Item name="smsbower_add_phone_send_attempts" label="add-phone 发送次数">
+                <Input placeholder="最大尝试次数 / 8" />
               </Form.Item>
             )}
             <Form.Item name="mail_provider" label="邮箱服务" rules={[{ required: true }]}>
@@ -1916,7 +1968,7 @@ export default function Accounts() {
                 onChange={(e: CheckboxChangeEvent) => {
                   registerForm.setFieldValue('mail_provider_mix_enabled', e.target.checked)
                   if (e.target.checked) {
-                    registerForm.setFieldValue('mail_provider_mix', DEFAULT_PARALLEL_MAIL_MIX)
+                    registerForm.setFieldValue('mail_provider_mix', mixProviderOptions.map((item) => item.value))
                   }
                 }}
               >
@@ -1952,11 +2004,7 @@ export default function Accounts() {
                 ]}
               >
                 <Checkbox.Group
-                  options={[
-                    { value: 'luckmail', label: 'LuckMail' },
-                    { value: 'cfworker', label: 'CF Worker' },
-                    { value: 'mail2925', label: '2925 Mail' },
-                  ]}
+                  options={mixProviderOptions}
                 />
               </Form.Item>
             )}

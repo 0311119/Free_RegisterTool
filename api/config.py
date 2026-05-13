@@ -52,6 +52,9 @@ CONFIG_KEYS = [
     "cfworker_random_subdomain",
     "cfworker_fingerprint",
     "smsbower_api_key",
+    "sms_provider",
+    "sim5_api_key",
+    "herosms_api_key",
     "smsbower_country",
     "smsbower_type",
     "smsbower_max_price",
@@ -177,6 +180,8 @@ def get_config():
         all_cfg["mail2925_alias_mode"] = "main"
     if not all_cfg.get("smsbower_country"):
         all_cfg["smsbower_country"] = "78,10,6,22,73,16,187,52,12"
+    if not all_cfg.get("sms_provider"):
+        all_cfg["sms_provider"] = "smsbower"
     if not all_cfg.get("smsbower_phone_attempts"):
         all_cfg["smsbower_phone_attempts"] = "12"
     if not all_cfg.get("smsbower_add_phone_send_attempts"):
