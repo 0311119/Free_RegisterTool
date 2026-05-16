@@ -6,6 +6,7 @@ from typing import Optional
 from datetime import datetime, timezone
 import hashlib
 import random
+import sys
 from core.db import TaskLog, engine
 from core.task_runtime import SkipCurrentAttemptRequested, StopTaskRequested
 import time, json, asyncio, threading, logging
@@ -78,10 +79,30 @@ def _log(task_id: str, msg: str):
                 drop_count = len(logs) - limit
                 del logs[:drop_count]
                 task["log_offset"] = int(task.get("log_offset", 0)) + drop_count
+    _emit_console_line(entry)
+
+
+def _emit_console_line(text: str) -> None:
+    """Best-effort console output that never aborts the task on encoding errors."""
     try:
-        print(entry)
+        print(text)
+        return
     except UnicodeEncodeError:
-        print(entry.encode("utf-8", errors="replace").decode("utf-8", errors="replace"))
+        pass
+
+    stream = sys.stdout
+    encoding = getattr(stream, "encoding", None) or "utf-8"
+    safe_text = text.encode(encoding, errors="replace").decode(encoding, errors="replace")
+
+    try:
+        if hasattr(stream, "buffer"):
+            stream.buffer.write((safe_text + "\n").encode(encoding, errors="replace"))
+            stream.buffer.flush()
+        else:
+            stream.write(safe_text + "\n")
+            stream.flush()
+    except Exception:
+        pass
 
 
 def _save_task_log(platform: str, email: str, status: str,

@@ -249,6 +249,76 @@ class DuckDuckGoMailboxTests(unittest.TestCase):
         self.assertEqual(code, "555666")
         self.assertTrue(any("Gmail API" in line for line in mailbox_logs))
 
+    @patch("time.sleep", return_value=None)
+    def test_wait_for_code_accepts_same_code_when_it_arrives_in_new_gmail_api_message(self, _sleep):
+        mailbox = create_mailbox(
+            "duckduckgo",
+            extra={
+                "duckduckgo_email": "wjwago@duck.com",
+                "duckduckgo_gmail_address": "ago950523@gmail.com",
+                "duckduckgo_gmail_api_mode": "gmail_api",
+                "duckduckgo_gmail_api_credentials": json.dumps({
+                    "installed": {
+                        "client_id": "client-id",
+                        "client_secret": "client-secret",
+                        "token_uri": "https://oauth2.googleapis.com/token",
+                    }
+                }),
+                "duckduckgo_gmail_api_token": json.dumps({
+                    "access_token": "token",
+                    "refresh_token": "refresh-token",
+                    "expires_at": 9999999999,
+                }),
+            },
+        )
+
+        new_message = EmailMessage()
+        new_message["Subject"] = "Your temporary ChatGPT login code"
+        new_message["From"] = "ChatGPT <noreply@tm.openai.com>"
+        new_message["To"] = "ago950523@gmail.com"
+        new_message["Date"] = "Fri, 15 May 2026 10:06:00 +0000"
+        new_message.set_content(
+            "Forwarded message for wjwago@duck.com\n\nYour verification code is 833723"
+        )
+        old_message = EmailMessage()
+        old_message["Subject"] = "Your OpenAI code is 833723"
+        old_message["From"] = "OpenAI <noreply@tm.openai.com>"
+        old_message["To"] = "ago950523@gmail.com"
+        old_message["Date"] = "Fri, 15 May 2026 10:05:00 +0000"
+        old_message.set_content(
+            "Forwarded message for wjwago@duck.com\n\nYour verification code is 833723"
+        )
+
+        raw_new = new_message.as_bytes()
+        raw_old = old_message.as_bytes()
+
+        def fake_request(method, url, params=None):
+            if url.endswith('/messages'):
+                return {"messages": [{"id": "api-new"}, {"id": "api-old"}]}
+            if url.endswith('/messages/api-new'):
+                return {
+                    "raw": __import__('base64').urlsafe_b64encode(raw_new).decode().rstrip('='),
+                    "internalDate": str(1747303560000),
+                }
+            if url.endswith('/messages/api-old'):
+                return {
+                    "raw": __import__('base64').urlsafe_b64encode(raw_old).decode().rstrip('='),
+                    "internalDate": str(1747303500000),
+                }
+            raise AssertionError(f'unexpected url: {url}')
+
+        mailbox._gmail_api_request = fake_request
+
+        code = mailbox.wait_for_code(
+            mailbox.get_email(),
+            timeout=5,
+            before_ids={"api-old"},
+            exclude_codes={"833723"},
+            otp_sent_at=1,
+        )
+
+        self.assertEqual(code, "833723")
+
 
     def test_get_email_can_rotate_private_address_pool(self):
         mailbox = create_mailbox(

@@ -17,19 +17,22 @@ class _BlankMailbox:
 class _TrackingMailbox:
     def __init__(self):
         self.account = MailboxAccount(email="demo@example.com", account_id="tracked-mailbox")
-        self.wait_call = None
+        self.wait_calls = []
         self.current_ids_calls = []
         self.status_updates = []
+        self.current_ids_results = [{"mid-1"}]
 
     def get_email(self):
         return self.account
 
     def get_current_ids(self, account):
         self.current_ids_calls.append(account)
-        return {"mid-1"}
+        if self.current_ids_results:
+            return self.current_ids_results.pop(0)
+        return {"mid-final"}
 
     def wait_for_code(self, *args, **kwargs):
-        self.wait_call = (args, kwargs)
+        self.wait_calls.append((args, kwargs))
         return "123456"
 
     def update_status(self, account, success, error=None):
@@ -128,12 +131,40 @@ class ChatGPTPluginTests(unittest.TestCase):
         self.assertTrue(adapter.run_called)
         self.assertEqual(adapter.last_code, "123456")
         self.assertEqual(result["success"], True)
-        self.assertEqual(mailbox.current_ids_calls, [mailbox.account])
-        self.assertIsNotNone(mailbox.wait_call)
-        _, kwargs = mailbox.wait_call
+        self.assertEqual(mailbox.current_ids_calls, [mailbox.account, mailbox.account])
+        self.assertEqual(len(mailbox.wait_calls), 1)
+        _, kwargs = mailbox.wait_calls[0]
         self.assertEqual(kwargs.get("before_ids"), {"mid-1"})
         self.assertEqual(kwargs.get("otp_sent_at"), 123.0)
         self.assertEqual(kwargs.get("exclude_codes"), {"654321"})
+
+    def test_custom_provider_refreshes_mailbox_baseline_after_each_verification_fetch(self):
+        mailbox = _TrackingMailbox()
+        mailbox.current_ids_results = [{"mid-1"}, {"mid-1", "mid-2"}, {"mid-3"}]
+        platform = ChatGPTPlatform(
+            config=RegisterConfig(extra={"chatgpt_registration_mode": "refresh_token"}),
+            mailbox=mailbox,
+        )
+
+        class _DoubleVerificationAdapter:
+            def run(self, context):
+                context.email_service.create_email()
+                context.email_service.get_verification_code(timeout=30, otp_sent_at=1.0, exclude_codes={"111111"})
+                context.email_service.get_verification_code(timeout=30, otp_sent_at=2.0, exclude_codes={"222222"})
+                return mock.Mock(success=True)
+
+            def build_account(self, result, fallback_password):
+                return {"success": True, "password": fallback_password}
+
+        with mock.patch(
+            "platforms.chatgpt.plugin.build_chatgpt_registration_mode_adapter",
+            return_value=_DoubleVerificationAdapter(),
+        ):
+            platform.register()
+
+        self.assertEqual(len(mailbox.wait_calls), 2)
+        self.assertEqual(mailbox.wait_calls[0][1].get("before_ids"), {"mid-1"})
+        self.assertEqual(mailbox.wait_calls[1][1].get("before_ids"), {"mid-1", "mid-2"})
 
     def test_platform_passes_task_control_to_registration_context(self):
         platform = ChatGPTPlatform(

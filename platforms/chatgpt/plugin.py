@@ -96,7 +96,7 @@ class ChatGPTPlatform(BasePlatform):
                 ):
                     if not self._acct:
                         raise RuntimeError("Mailbox not yet created, cannot get verification code")
-                    return _mailbox.wait_for_code(
+                    code = _mailbox.wait_for_code(
                         self._acct,
                         keyword="",
                         timeout=timeout,
@@ -104,6 +104,13 @@ class ChatGPTPlatform(BasePlatform):
                         otp_sent_at=otp_sent_at,
                         exclude_codes=exclude_codes,
                     )
+                    get_current_ids = getattr(_mailbox, "get_current_ids", None)
+                    if callable(get_current_ids):
+                        try:
+                            self._before_ids = set(get_current_ids(self._acct) or [])
+                        except Exception:
+                            pass
+                    return code
 
                 def update_status(self, success, error=None):
                     mailbox_update = getattr(_mailbox, "update_status", None)
@@ -146,7 +153,7 @@ class ChatGPTPlatform(BasePlatform):
                     otp_sent_at=None,
                     exclude_codes=None,
                 ):
-                    return _tmail.wait_for_code(
+                    code = _tmail.wait_for_code(
                         self._acct,
                         keyword="",
                         timeout=timeout,
@@ -154,6 +161,11 @@ class ChatGPTPlatform(BasePlatform):
                         otp_sent_at=otp_sent_at,
                         exclude_codes=exclude_codes,
                     )
+                    try:
+                        self._before_ids = set(_tmail.get_current_ids(self._acct) or [])
+                    except Exception:
+                        pass
+                    return code
 
                 def update_status(self, success, error=None):
                     pass

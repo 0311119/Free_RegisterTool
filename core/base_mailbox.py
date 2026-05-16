@@ -1409,6 +1409,7 @@ class DuckDuckGoMailbox(BaseMailbox):
         seen = {str(item) for item in (before_ids or set())}
         keyword_lower = str(keyword or "").strip().lower()
         target_email = str(account.email or self.duck_email or "").strip().lower()
+        previous_ids = set(seen)
         client = None
         reconnects_used = 0
         def poll_once() -> Optional[str]:
@@ -1462,7 +1463,10 @@ class DuckDuckGoMailbox(BaseMailbox):
                     if otp_sent_at and message_ts and message_ts < float(otp_sent_at):
                         continue
                     code = self._safe_extract(combined, code_pattern)
-                    if code and code in exclude_codes:
+                    # A resent login challenge may legitimately reuse the same OTP digits
+                    # while still arriving in a brand-new forwarded message. Only suppress
+                    # excluded codes when they were already present before this wait began.
+                    if code and code in exclude_codes and uid in previous_ids:
                         continue
                     if code:
                         self._log(f"[DuckDuckGo] received forwarded OTP from Gmail: {code}")
@@ -1503,6 +1507,7 @@ class DuckDuckGoMailbox(BaseMailbox):
         seen = {str(item) for item in (before_ids or set())}
         keyword_lower = str(keyword or "").strip().lower()
         target_email = str(account.email or self.duck_email or "").strip().lower()
+        previous_ids = set(seen)
         def poll_once() -> Optional[str]:
             try:
                 current_ids = self._gmail_api_list_message_ids(
@@ -1552,7 +1557,10 @@ class DuckDuckGoMailbox(BaseMailbox):
                     if otp_sent_at and message_ts and message_ts < (float(otp_sent_at) - 300.0):
                         continue
                     code = self._safe_extract(combined, code_pattern)
-                    if code and code in exclude_codes:
+                    # A resent login challenge may legitimately reuse the same OTP digits
+                    # while still arriving in a brand-new forwarded message. Only suppress
+                    # excluded codes when they were already present before this wait began.
+                    if code and code in exclude_codes and message_id in previous_ids:
                         continue
                     if code:
                         self._log(f"[DuckDuckGo] received forwarded OTP from Gmail API: {code}")

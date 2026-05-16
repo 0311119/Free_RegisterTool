@@ -13,6 +13,7 @@ import hashlib
 import threading
 import base64
 import os
+import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Tuple, Union, Optional
 from urllib.parse import urlencode, urlparse, parse_qs
@@ -44,6 +45,29 @@ KIRO_IDC_SCOPES = [
     "codewhisperer:taskassist",
 ]
 logger = logging.getLogger("kiro.playwright")
+
+
+def _safe_console_emit(text: str) -> None:
+    """Avoid crashing the flow when the host console cannot encode Unicode."""
+    try:
+        print(text)
+        return
+    except UnicodeEncodeError:
+        pass
+
+    stream = sys.stdout
+    encoding = getattr(stream, "encoding", None) or "utf-8"
+    safe_text = text.encode(encoding, errors="replace").decode(encoding, errors="replace")
+
+    try:
+        if hasattr(stream, "buffer"):
+            stream.buffer.write((safe_text + "\n").encode(encoding, errors="replace"))
+            stream.buffer.flush()
+        else:
+            stream.write(safe_text + "\n")
+            stream.flush()
+    except Exception:
+        pass
 
 _UA_TEMPLATES = [
     {
@@ -169,7 +193,7 @@ class KiroRegister:
         self.proxy_url = str(proxy).strip() if proxy else None
         self.tag = tag
         self.headless = headless
-        self.log_fn = print
+        self.log_fn = _safe_console_emit
         self.pw = None
         self.browser = None
         self.context = None
